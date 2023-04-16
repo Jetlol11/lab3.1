@@ -29,6 +29,10 @@ UART_HandleTypeDef huart2;
 uint32_t QEIReadRaw;
 uint16_t position;
 uint16_t targetposition;
+arm_pid_instance_f32 PID = {0};
+float position = 0;
+float setposition = 0;
+float Vfeedback = 0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -38,7 +42,7 @@ static void MX_USART2_UART_Init(void);
 static void MX_TIM1_Init(void);
 static void MX_TIM2_Init(void);
 /* USER CODE BEGIN PFP */
-
+float PlantSimulation(float Vin);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -77,6 +81,10 @@ int main(void)
   HAL_TIM_Encoder_Start(&htim2, TIM_CHANNEL_1|TIM_CHANNEL_2);
   HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1);
   HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_2);
+  PID.Kp = 0.1;
+  PID.Ki = 0.00001;
+  PID.Kd = 1.2;
+  arm_pid_init_f32(&PID, 0);
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -88,6 +96,13 @@ int main(void)
     /* USER CODE BEGIN 3 */
     	QEIReadRaw = __HAL_TIM_GET_COUNTER(&htim2);
     	position = (QEIReadRaw*36000)/307200 ;
+    	static uint32_t timestamp = 0;
+    		if(HAL_GetTick() > timestamp){
+    			timestamp = HAL_GetTick() + 10;
+
+    			Vfeedback = arm_pid_f32(&PID, setposition - position);
+    			position = PlantSimulation(Vfeedback);
+    		}
     }
   /* USER CODE END 3 */
 }
@@ -331,7 +346,18 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
+float PlantSimulation(float Vin){
+	static float speed = 0;
+	static float position = 0;
+	float current = Vin - speed * 0.0123;
+	float torque = current * 0.456;
+	float acc = torque * 0.759;
+	speed += acc;
+	position += speed;
 
+	return position;
+
+}
 /* USER CODE END 4 */
 
 /**
