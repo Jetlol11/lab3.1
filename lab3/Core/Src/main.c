@@ -22,17 +22,26 @@
 /* Private variables ---------------------------------------------------------*/
 TIM_HandleTypeDef htim1;
 TIM_HandleTypeDef htim2;
+TIM_HandleTypeDef htim3;
 
 UART_HandleTypeDef huart2;
 
 /* USER CODE BEGIN PV */
 uint32_t QEIReadRaw;
-uint16_t position;
-uint16_t targetposition;
-arm_pid_instance_f32 PID = {0};
-float position = 0;
-float setposition = 0;
-float Vfeedback = 0;
+float position;
+float targetposition;
+float prevT=0;
+float eprev=0;
+float eintegral=0;
+float u;
+float Pwm=0;
+float Kp=0;
+float Ki=0;
+float Kd=0;
+int16_t e;
+int dir =1;
+float deltaT;
+float dedt;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -41,6 +50,7 @@ static void MX_GPIO_Init(void);
 static void MX_USART2_UART_Init(void);
 static void MX_TIM1_Init(void);
 static void MX_TIM2_Init(void);
+static void MX_TIM3_Init(void);
 /* USER CODE BEGIN PFP */
 float PlantSimulation(float Vin);
 /* USER CODE END PFP */
@@ -77,14 +87,12 @@ int main(void)
   MX_USART2_UART_Init();
   MX_TIM1_Init();
   MX_TIM2_Init();
+  MX_TIM3_Init();
   /* USER CODE BEGIN 2 */
   HAL_TIM_Encoder_Start(&htim2, TIM_CHANNEL_1|TIM_CHANNEL_2);
   HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1);
   HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_2);
-  PID.Kp = 0.1;
-  PID.Ki = 0.00001;
-  PID.Kd = 1.2;
-  arm_pid_init_f32(&PID, 0);
+  HAL_TIM_Base_Start_IT(&htim3);
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -94,15 +102,32 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-    	QEIReadRaw = __HAL_TIM_GET_COUNTER(&htim2);
-    	position = (QEIReadRaw*36000)/307200 ;
-    	static uint32_t timestamp = 0;
-    		if(HAL_GetTick() > timestamp){
-    			timestamp = HAL_GetTick() + 10;
 
-    			Vfeedback = arm_pid_f32(&PID, setposition - position);
-    			position = PlantSimulation(Vfeedback);
-    		}
+//    	QEIReadRaw = __HAL_TIM_GET_COUNTER(&htim2);
+//    	position = (QEIReadRaw*36000)/307200 ;
+//    	static uint32_t timestamp = 0;
+//    	timestamp = HAL_GetTick();
+//    	float deltaT = (timestamp-prevT)/1000000;
+//    	prevT = timestamp;
+//    	e= targetposition-position;
+//    	float dedt = (e-eprev)/(deltaT);
+//    	float eintegral = eintegral+(e*deltaT);
+//    	float u = (Kp*e) + (Kd*dedt) + (Ki*eintegral);
+//    	float Pwm = fabs(u);
+//    	if (Pwm > 65535) {
+//			Pwm = 65535;
+//		}
+//    	int dir =1;
+//    	if (0 > u) {
+//			dir = -1;
+//		}
+//    	if (dir == 1) {
+//			__HAL_TIM_SET_COMPARE(&htim1,TIM_CHANNEL_1,Pwm);
+//		}
+//    	else if (dir == -1){
+//    		__HAL_TIM_SET_COMPARE(&htim1,TIM_CHANNEL_2,Pwm);
+//    	}
+
     }
   /* USER CODE END 3 */
 }
@@ -172,9 +197,9 @@ static void MX_TIM1_Init(void)
   /* USER CODE BEGIN TIM1_Init 1 */
   /* USER CODE END TIM1_Init 1 */
   htim1.Instance = TIM1;
-  htim1.Init.Prescaler = 0;
+  htim1.Init.Prescaler = 83;
   htim1.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim1.Init.Period = 65535;
+  htim1.Init.Period = 999;
   htim1.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim1.Init.RepetitionCounter = 0;
   htim1.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
@@ -279,6 +304,51 @@ static void MX_TIM2_Init(void)
 }
 
 /**
+  * @brief TIM3 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM3_Init(void)
+{
+
+  /* USER CODE BEGIN TIM3_Init 0 */
+
+  /* USER CODE END TIM3_Init 0 */
+
+  TIM_ClockConfigTypeDef sClockSourceConfig = {0};
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
+
+  /* USER CODE BEGIN TIM3_Init 1 */
+
+  /* USER CODE END TIM3_Init 1 */
+  htim3.Instance = TIM3;
+  htim3.Init.Prescaler = 83;
+  htim3.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim3.Init.Period = 1000-1;
+  htim3.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim3.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_Base_Init(&htim3) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
+  if (HAL_TIM_ConfigClockSource(&htim3, &sClockSourceConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim3, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM3_Init 2 */
+
+  /* USER CODE END TIM3_Init 2 */
+
+}
+
+/**
   * @brief USART2 Initialization Function
   * @param None
   * @retval None
@@ -346,18 +416,33 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
-float PlantSimulation(float Vin){
-	static float speed = 0;
-	static float position = 0;
-	float current = Vin - speed * 0.0123;
-	float torque = current * 0.456;
-	float acc = torque * 0.759;
-	speed += acc;
-	position += speed;
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){
+	if (htim==&htim3) {
+    	QEIReadRaw = __HAL_TIM_GET_COUNTER(&htim2);
+    	position = (QEIReadRaw*36000)/307200 ;
+    	deltaT = 0.001 ;
+    	e= targetposition-position;
+    	dedt = (e-eprev)/(deltaT);
+    	eintegral = eintegral+(e*deltaT);
+    	u = (Kp*e) + (Kd*dedt) + (Ki*eintegral);
+    	float Pwm = fabs(u);
+    	if (Pwm > 1000) {
+			Pwm = 1000;
+		}
+    	eprev = 0;
 
-	return position;
-
+    	if (0 > u) {
+			dir = -1;
+		}
+    	if (dir == -1) {
+			__HAL_TIM_SET_COMPARE(&htim1,TIM_CHANNEL_1,Pwm);
+		}
+    	else if (dir == 1){
+    		__HAL_TIM_SET_COMPARE(&htim1,TIM_CHANNEL_2,Pwm);
+    	}
+	}
 }
+
 /* USER CODE END 4 */
 
 /**
