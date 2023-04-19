@@ -5,6 +5,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include "math.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -27,7 +28,7 @@ TIM_HandleTypeDef htim3;
 UART_HandleTypeDef huart2;
 
 /* USER CODE BEGIN PV */
-uint32_t QEIReadRaw;
+uint64_t QEIReadRaw;
 float position;
 float targetposition;
 float prevT=0;
@@ -35,10 +36,10 @@ float eprev=0;
 float eintegral=0;
 float u;
 float Pwm=0;
-float Kp=50;
-float Ki=0.001;
+float Kp=20;
+float Ki=0.000001;
 float Kd=0;
-int16_t e;
+int32_t e;
 int dir =1;
 float deltaT;
 float dedt;
@@ -430,15 +431,17 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){
 			Pwm = 1000;
 		}
     	eprev = 0;
-
+    	dir = 1;
     	if (0 > u) {
 			dir = -1;
 		}
     	if (dir == -1) {
 			__HAL_TIM_SET_COMPARE(&htim1,TIM_CHANNEL_1,Pwm);
+			__HAL_TIM_SET_COMPARE(&htim1,TIM_CHANNEL_2,0);
 		}
     	else if (dir == 1){
     		__HAL_TIM_SET_COMPARE(&htim1,TIM_CHANNEL_2,Pwm);
+    		__HAL_TIM_SET_COMPARE(&htim1,TIM_CHANNEL_1,0);
     	}
 	}
 }
